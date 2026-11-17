@@ -1,0 +1,9 @@
+import {useEffect,useState} from "react";import {animate} from "framer-motion";import Fx from "../components/Fx";import Polaroid from "../components/Polaroid";import {polaroidImages} from "../lib/quiz";import {imgUrl} from "../lib/supabase";
+export default function Result({onRetake}:{onRetake:()=>void}){const [n,setN]=useState(0);const [polaroids,setPolaroids]=useState<Record<string,string>>({});const [mediaError,setMediaError]=useState("");
+useEffect(()=>{let active=true;const c=animate(0,100,{duration:2.5,onUpdate:v=>setN(Math.round(v))});polaroidImages().then(setPolaroids).catch(e=>{if(active)setMediaError(e instanceof Error?e.message:"Could not load Polaroid photos")});return()=>{active=false;c.stop()}},[]);
+return <div className="text-center"><Fx kind="confetti" n={60}/><Fx kind="hearts"/><p className="text-xs font-semibold uppercase tracking-[.3em]">Investigation complete</p>
+<div className="font-serif text-[9rem] font-black leading-none text-crimson">{n}%</div><h2 className="font-serif text-2xl font-bold">COMPATIBLE WITH JAHNEVI ❤️</h2>
+<div className="my-6 flex justify-center -space-x-6"><Polaroid src={polaroids.polaroid_result_us?imgUrl(polaroids.polaroid_result_us):undefined} caption="us" rot={-6} emoji="📸"/><Polaroid src={polaroids.polaroid_result_always?imgUrl(polaroids.polaroid_result_always):undefined} caption="always" rot={6} emoji="💞"/></div>
+{mediaError&&<p role="alert" className="text-sm text-crimson">{mediaError}</p>}
+<p className="font-serif text-lg italic">You can take this quiz a thousand times, but the result will always be 100%. Not because you answered every question correctly, but because I loved you even before you took this quiz. ❤️</p>
+<div><button onClick={onRetake} className="mt-6 text-sm underline">Take the investigation again</button></div></div>}

@@ -1,0 +1,9 @@
+let ac:AudioContext|undefined,vol=.6,muted=false,on=true,t=0,n=0,mood="intro";
+const M:Record<string,{n:number[];t:number;w:OscillatorType}>={intro:{n:[261,329,392,329,523,392,329,392],t:600,w:"sine"},quiz:{n:[392,523,440,587,523,659,587,523],t:280,w:"triangle"},brain:{n:[110,110,147,110,131,110,98,123],t:330,w:"sawtooth"},letter:{n:[261,392,329,392,293,349,261,329],t:700,w:"sine"}};
+function tone(f:number,d:number,w:OscillatorType,g:number,at=0){if(!ac||muted)return;const s=ac.currentTime+at,o=ac.createOscillator(),a=ac.createGain();o.type=w;o.frequency.value=f;a.gain.setValueAtTime(g*vol,s);a.gain.exponentialRampToValueAtTime(.0001,s+d);o.connect(a);a.connect(ac.destination);o.start(s);o.stop(s+d)}
+const S:Record<string,number[][]>={click:[[600]],pop:[[880],[1175,.08]],ok:[[523],[659,.1],[784,.2]],bad:[[220],[165,.15]],fun:[[440],[660,.1],[550,.2]],heart:[[700],[900,.1]],conf:[[500],[700,.06],[900,.12]],final:[[523],[659,.12],[784,.24],[1047,.36]],letter:[[392],[523,.12],[659,.24]]};
+let last=0;export function sfx(k:string){const x=Date.now();if(x-last<90)return;last=x;(S[k]??S.click).forEach(a=>tone(a[0],.22,"triangle",.25,a[1]))}
+function loop(){if(!ac||!on||ac.state!=="running"){clearTimeout(t);t=0;return}const m=M[mood]??M.quiz;tone(m.n[n++%m.n.length],m.t/700,m.w,.07);t=window.setTimeout(()=>{t=0;loop()},m.t)}
+function start(){if(!ac){ac=new AudioContext();ac.onstatechange=()=>{if(ac?.state==="running"){if(on&&!t)loop()}else{clearTimeout(t);t=0}}}if(ac.state!=="running"){void ac.resume().then(()=>{if(on&&!t)loop()}).catch(error=>console.error("Could not resume background music:",error));return}if(on&&!t)loop()}
+export const audio={start,setMood(m:string){mood=m},
+toggle(){on=!on;if(on)start();else{clearTimeout(t);t=0}return on},mute(){return muted=!muted},volume(v:number){vol=v},get mood(){return mood}};
