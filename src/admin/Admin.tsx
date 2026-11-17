@@ -14,12 +14,14 @@ const [ans,setAns]=useState<{question_id:string;answer_text:string}[]>([]);
 const [prof,setProf]=useState<Record<string,string|number|null>>({});
 const [letter,setLetter]=useState("");
 const [sza,setSza]=useState("");
+const [musicPath,setMusicPath]=useState("");
 const [msg,setMsg]=useState("");
 const [questionEdits,setQuestionEdits]=useState<QuestionEdits>(()=>defaultQuestionEdits());
 const [imagePaths,setImagePaths]=useState<Record<string,string>>({});
 const [polaroids,setPolaroids]=useState<Record<string,string>>({});
 const [uploadingImage,setUploadingImage]=useState("");
 const [uploadingPolaroid,setUploadingPolaroid]=useState("");
+const [uploadingMusic,setUploadingMusic]=useState(false);
 const [savingQuestions,setSavingQuestions]=useState(false);
 const inp="w-full rounded-xl bg-cream p-3";
 
@@ -39,6 +41,7 @@ setRows(sessions.data as Row[]);
 for(const setting of settings.data??[]){
 if(setting.key==="letter")setLetter(typeof setting.value==="string"?setting.value:String(setting.value??""));
 if(setting.key==="music_sza")setSza(typeof setting.value==="string"?setting.value:"");
+if(setting.key==="music_track"&&typeof setting.value==="string")setMusicPath(setting.value);
 if(setting.key==="quiz_questions")setQuestionEdits({...defaultQuestionEdits(),...parseQuestionEdits(setting.value)});
 if(setting.key.startsWith("polaroid_")&&typeof setting.value==="string")setPolaroids(current=>({...current,[setting.key]:setting.value}));
 }
@@ -72,6 +75,46 @@ if(upload.error){setMsg(upload.error.message);return}
 const record=await supabase.from("photos").insert({path,caption:f.name,meta:{size:f.size,type:f.type}});
 if(record.error){setMsg(record.error.message);return}
 setMsg("Uploaded "+imgUrl(path));
+};
+
+const uploadMusicTrack=async(file:File)=>{
+const ext=file.name.split(".").pop()?.toLowerCase()??"";
+const types:Record<string,string>={mp3:"audio/mpeg",m4a:"audio/mp4",aac:"audio/aac",wav:"audio/wav",ogg:"audio/ogg",opus:"audio/ogg",webm:"audio/webm"};
+const contentType=file.type.startsWith("audio/")?file.type:types[ext];
+if(!contentType){setMsg("Choose an MP3, M4A, AAC, WAV, OGG, or WebM audio file.");return}
+const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
+const path=`music/${Date.now()}-${safeName}`;
+setUploadingMusic(true);
+try{
+const upload=await supabase.storage.from("photos").upload(path,file,{contentType});
+if(upload.error){setMsg(upload.error.message);return}
+const save=await supabase.from("settings").upsert({key:"music_track",value:path});
+if(save.error){
+const cleanup=await supabase.storage.from("photos").remove([path]);
+setMsg(cleanup.error?`${save.error.message} (uploaded file cleanup failed: ${cleanup.error.message})`:save.error.message);
+return;
+}
+const previous=musicPath;
+setMusicPath(path);
+if(previous){
+const cleanup=await supabase.storage.from("photos").remove([previous]);
+if(cleanup.error){setMsg(`Music saved, but the previous file could not be removed: ${cleanup.error.message}`);return}
+}
+setMsg("Background music uploaded.");
+}catch(error){
+setMsg(error instanceof Error?error.message:"Music upload failed.");
+}finally{
+setUploadingMusic(false);
+}
+};
+
+const removeMusicTrack=async()=>{
+if(!musicPath)return;
+const {error}=await supabase.from("settings").delete().eq("key","music_track");
+if(error){setMsg(error.message);return}
+setMusicPath("");
+const cleanup=await supabase.storage.from("photos").remove([musicPath]);
+setMsg(cleanup.error?`Music removed from the game, but file cleanup failed: ${cleanup.error.message}`:"Background music removed.");
 };
 
 const uploadPolaroid=async(key:string,file:File)=>{
@@ -198,7 +241,7 @@ const cleanup=await supabase.storage.from("photos").remove([path]);
 setMsg(cleanup.error?`Photo removed from the quiz, but file cleanup failed: ${cleanup.error.message}`:"Option photo removed.");
 };
 
-if(!ok)return <div className="paper mx-auto grid h-screen max-w-sm content-center gap-3 p-6">
+if(!ok)return <div className="paper mx-auto grid h-[100dvh] min-h-[100dvh] w-full max-w-sm content-center gap-3 p-4 sm:p-6">
 <h1 className="font-serif text-3xl font-black text-crimson">Admin</h1>
 <input className={inp} placeholder="Email" value={cred.e} onChange={e=>setCred({...cred,e:e.target.value})}/>
 <input className={inp} type="password" placeholder="Password" value={cred.p} onChange={e=>setCred({...cred,p:e.target.value})}/>
@@ -208,7 +251,7 @@ if(!ok)return <div className="paper mx-auto grid h-screen max-w-sm content-cente
 
 const questionRows=STEPS.flatMap((step,stepIndex)=>step.k==="q"?[{step,stepIndex}]:[]);
 const polaroidSlots=[{key:"polaroid_intro_chirag",label:"Opening — Chirag"},{key:"polaroid_intro_jahnevi",label:"Opening — Jahnevi"},{key:"polaroid_sza",label:"Mid-game — Muscle Polaroid"},{key:"polaroid_result_us",label:"Result — Us"},{key:"polaroid_result_always",label:"Result — Always"}];
-return <div className="paper h-screen overflow-y-auto p-6">
+return <div className="paper h-[100dvh] min-h-[100dvh] overflow-y-auto overscroll-contain p-4 sm:p-6">
 <div className="mx-auto grid max-w-5xl gap-6 md:grid-cols-2">
 <section>
 <h2 className="font-serif text-2xl font-bold text-crimson">Sessions</h2>
@@ -222,6 +265,17 @@ return <div className="paper h-screen overflow-y-auto p-6">
 <button className="rounded-full bg-crimson px-5 py-2 text-ivory" onClick={()=>void put("letter",letter)}>Save letter</button>
 <input className={inp} value={sza} onChange={e=>setSza(e.target.value)} placeholder="SZA – BMF embed/audio URL"/>
 <button className="rounded-full bg-crimson px-5 py-2 text-ivory" onClick={()=>void put("music_sza",sza)}>Save music link</button>
+<div className="space-y-3 rounded-2xl bg-cream/60 p-4">
+<div><h3 className="font-semibold text-crimson">Background music</h3><p className="text-sm">Upload one track to loop throughout the quiz. It starts after the first tap.</p></div>
+{musicPath&&<audio controls preload="metadata" src={imgUrl(musicPath)} className="w-full"/>}
+<div className="flex flex-wrap items-center gap-3">
+<label className="cursor-pointer rounded-full bg-burgundy px-4 py-2 text-sm text-ivory">
+{uploadingMusic?"Uploading…":musicPath?"Replace track":"Upload track"}
+<input className="sr-only" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.webm" disabled={uploadingMusic} onChange={e=>{const file=e.target.files?.[0];if(file)void uploadMusicTrack(file);e.currentTarget.value=""}}/>
+</label>
+{musicPath&&<button type="button" disabled={uploadingMusic} className="text-sm underline disabled:opacity-50" onClick={()=>void removeMusicTrack()}>Remove track</button>}
+</div>
+</div>
 <input type="file" accept="image/*" onChange={e=>{const file=e.target.files?.[0];if(file)void up(file);e.currentTarget.value=""}}/>
 </section>
 

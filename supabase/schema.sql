@@ -4,7 +4,7 @@ create table sessions(id uuid primary key default gen_random_uuid(),user_id uuid
 create table answers(id uuid primary key default gen_random_uuid(),session_id uuid references sessions on delete cascade,user_id uuid not null,question_id text not null,option_index int,answer_text text,answered_at timestamptz default now(),unique(session_id,question_id));
 create table option_images(question_id text,option_index int,path text,primary key(question_id,option_index));
 create table photos(id uuid primary key default gen_random_uuid(),path text not null,caption text,meta jsonb,created_at timestamptz default now());
-create table settings(key text primary key,value jsonb);  -- keys: letter, music_sza, music_intro, music_quiz, music_brain, music_letter
+create table settings(key text primary key,value jsonb);  -- keys include quiz_questions, music_track, and polaroid_* paths
 create table admins(user_id uuid primary key references auth.users);
 create function is_admin() returns boolean language sql stable security definer as $$select exists(select 1 from admins where user_id=auth.uid())$$;
 alter table profiles enable row level security;alter table sessions enable row level security;alter table answers enable row level security;

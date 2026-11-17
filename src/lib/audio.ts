@@ -1,9 +1,113 @@
-let ac:AudioContext|undefined,vol=.6,muted=false,on=true,t=0,n=0,mood="intro";
-const M:Record<string,{n:number[];t:number;w:OscillatorType}>={intro:{n:[261,329,392,329,523,392,329,392],t:600,w:"sine"},quiz:{n:[392,523,440,587,523,659,587,523],t:280,w:"triangle"},brain:{n:[110,110,147,110,131,110,98,123],t:330,w:"sawtooth"},letter:{n:[261,392,329,392,293,349,261,329],t:700,w:"sine"}};
-function tone(f:number,d:number,w:OscillatorType,g:number,at=0){if(!ac||muted)return;const s=ac.currentTime+at,o=ac.createOscillator(),a=ac.createGain();o.type=w;o.frequency.value=f;a.gain.setValueAtTime(g*vol,s);a.gain.exponentialRampToValueAtTime(.0001,s+d);o.connect(a);a.connect(ac.destination);o.start(s);o.stop(s+d)}
-const S:Record<string,number[][]>={click:[[600]],pop:[[880],[1175,.08]],ok:[[523],[659,.1],[784,.2]],bad:[[220],[165,.15]],fun:[[440],[660,.1],[550,.2]],heart:[[700],[900,.1]],conf:[[500],[700,.06],[900,.12]],final:[[523],[659,.12],[784,.24],[1047,.36]],letter:[[392],[523,.12],[659,.24]]};
-let last=0;export function sfx(k:string){const x=Date.now();if(x-last<90)return;last=x;(S[k]??S.click).forEach(a=>tone(a[0],.22,"triangle",.25,a[1]))}
-function loop(){if(!ac||!on||ac.state!=="running"){clearTimeout(t);t=0;return}const m=M[mood]??M.quiz;tone(m.n[n++%m.n.length],m.t/700,m.w,.07);t=window.setTimeout(()=>{t=0;loop()},m.t)}
-function start(){if(!ac){ac=new AudioContext();ac.onstatechange=()=>{if(ac?.state==="running"){if(on&&!t)loop()}else{clearTimeout(t);t=0}}}if(ac.state!=="running"){void ac.resume().then(()=>{if(on&&!t)loop()}).catch(error=>console.error("Could not resume background music:",error));return}if(on&&!t)loop()}
-export const audio={start,setMood(m:string){mood=m},
-toggle(){on=!on;if(on)start();else{clearTimeout(t);t=0}return on},mute(){return muted=!muted},volume(v:number){vol=v},get mood(){return mood}};
+type MusicState="idle"|"loading"|"playing"|"paused"|"error";
+
+let context:AudioContext|undefined;
+let player:HTMLAudioElement|undefined;
+let trackUrl="";
+let volume=.6;
+let muted=false;
+let enabled=true;
+let activated=false;
+let state:MusicState="idle";
+const listeners=new Set<()=>void>();
+
+function notify(){listeners.forEach(listener=>listener())}
+function setState(next:MusicState){state=next;notify()}
+
+function getPlayer(){
+if(!player){
+player=new Audio();
+player.loop=true;
+player.preload="auto";
+player.volume=volume;
+player.muted=muted;
+player.addEventListener("playing",()=>setState("playing"));
+player.addEventListener("pause",()=>{if(state!=="error")setState(trackUrl?"paused":"idle")});
+player.addEventListener("error",()=>setState("error"));
+}
+return player;
+}
+
+function playMusic(){
+if(!trackUrl){setState("idle");return}
+const element=getPlayer();
+setState("loading");
+void element.play().then(()=>setState("playing")).catch(error=>{
+setState("error");
+console.error("Could not play background music:",error);
+});
+}
+
+function playEffect(kind:"click"|"swoosh"){
+if(!context||muted)return;
+const now=context.currentTime,oscillator=context.createOscillator(),gain=context.createGain();
+const duration=kind==="click"?.07:.25;
+oscillator.type="sine";
+gain.gain.setValueAtTime(.0001,now);
+if(kind==="click"){
+oscillator.frequency.setValueAtTime(740,now);
+oscillator.frequency.exponentialRampToValueAtTime(520,now+.06);
+gain.gain.exponentialRampToValueAtTime(Math.max(.0001,.08*volume),now+.06);
+gain.gain.exponentialRampToValueAtTime(.0001,now+.07);
+}else{
+oscillator.type="triangle";
+oscillator.frequency.setValueAtTime(760,now);
+oscillator.frequency.exponentialRampToValueAtTime(180,now+.24);
+gain.gain.linearRampToValueAtTime(Math.max(.0001,.05*volume),now+.03);
+gain.gain.exponentialRampToValueAtTime(.0001,now+.24);
+}
+oscillator.connect(gain);
+gain.connect(context.destination);
+oscillator.start(now);
+oscillator.stop(now+duration);
+}
+
+export function sfx(kind:"click"|"swoosh"){
+if(muted)return;
+if(!context)context=new AudioContext();
+if(context.state==="running"){playEffect(kind);return}
+void context.resume().then(()=>playEffect(kind)).catch(error=>console.error("Could not play interface sound:",error));
+}
+
+export const audio={
+setTrack(url:string){
+if(trackUrl===url)return;
+trackUrl=url;
+if(!url){
+player?.pause();
+if(player)player.removeAttribute("src");
+setState("idle");
+return;
+}
+const element=getPlayer();
+element.src=url;
+element.load();
+if(activated&&enabled)playMusic();
+},
+start(){
+activated=true;
+if(enabled)playMusic();
+},
+stop(){player?.pause()},
+toggle(){
+enabled=!enabled;
+if(enabled){activated=true;playMusic()}else{player?.pause();setState("paused")}
+return enabled;
+},
+mute(){
+muted=!muted;
+if(player)player.muted=muted;
+notify();
+return muted;
+},
+volume(value:number){
+volume=Math.max(0,Math.min(1,value));
+if(player)player.volume=volume;
+},
+subscribe(listener:()=>void){
+listeners.add(listener);
+return()=>{listeners.delete(listener)};
+},
+get state(){return state},
+get enabled(){return enabled},
+get muted(){return muted}
+};

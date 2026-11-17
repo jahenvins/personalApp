@@ -1,2 +1,2 @@
 export default function Polaroid({src,caption,rot=-4,emoji="😎"}:{src?:string;caption:string;rot?:number;emoji?:string}){
-return <div className="inline-block bg-white p-3 pb-9 shadow-2xl" style={{transform:`rotate(${rot}deg)`}}><div className="grid h-56 w-48 place-items-center bg-cream text-7xl">{src?<img src={src} alt="" className="h-full w-full object-cover"/>:emoji}</div><p className="mt-2 font-serif italic">{caption}</p></div>}
+return <div className="inline-block bg-white p-3 pb-9 shadow-2xl" style={{transform:`rotate(${rot}deg)`}}><div className="grid h-[min(56vw,14rem)] w-[min(48vw,12rem)] place-items-center bg-cream text-7xl">{src?<img src={src} alt="" className="h-full w-full object-cover"/>:emoji}</div><p className="mt-2 font-serif italic">{caption}</p></div>}
