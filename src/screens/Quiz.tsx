@@ -1,24 +1,26 @@
 import {useEffect,useRef,useState} from "react";import {AnimatePresence,motion} from "framer-motion";
 import {useQuiz} from "../lib/useQuiz";import {audio,sfx} from "../lib/audio";
-import {getSetting,optionImages,polaroidImages,saveProfile} from "../lib/quiz";import {imgUrl,publicUrl} from "../lib/supabase";import ProgressBar from "../components/ProgressBar";import MusicPlayer from "../components/MusicPlayer";
+import {getSetting,optionImages,polaroidImages,saveProfile} from "../lib/quiz";import {imgUrl,publicUrl} from "../lib/supabase";import ProgressBar from "../components/ProgressBar";
 import AnswerCard from "../components/AnswerCard";import ReactionPopup from "../components/ReactionPopup";import Fx from "../components/Fx";import Polaroid from "../components/Polaroid";
 import Result from "./Result";
 const shell="paper mx-auto flex h-[100dvh] w-full max-w-[430px] flex-col overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-[calc(env(safe-area-inset-bottom)+6rem)] pt-[calc(env(safe-area-inset-top)+4rem)] sm:px-5";
+function playSfx(kind:"click"|"swoosh"){try{sfx(kind)}catch(error){console.error("Could not play interface sound:",error)}}
+function startMusic(){try{audio.start()}catch(error){console.error("Could not start background music:",error)}}
 export default function Quiz(){const {s,i,a,err,next,answer,finish,retake,steps}=useQuiz();const [imgs,setImgs]=useState<Record<string,string>>({});const [polaroids,setPolaroids]=useState<Record<string,string>>({});const [imageError,setImageError]=useState("");const [musicError,setMusicError]=useState("");const [pop,setPop]=useState<{e:string;t:string}|null>(null);const [fx,setFx]=useState<"hearts"|"confetti"|null>(null);const previousIndex=useRef<number>();
 const [f,setF]=useState({name:"",age:"",h:"",w:""});const [phase,setPhase]=useState(0);
 const st=steps[i];
 useEffect(()=>{let active=true;optionImages().then(setImgs).catch(e=>{if(active)setImageError(e instanceof Error?e.message:"Could not load option photos")});polaroidImages().then(setPolaroids).catch(e=>{if(active)setImageError(e instanceof Error?e.message:"Could not load Polaroid photos")});return()=>{active=false}},[]);
 useEffect(()=>{let active=true;getSetting<string>("music_track","").then(path=>{if(active)audio.setTrack(path?publicUrl(path):"")}).catch(error=>{if(active)setMusicError(error instanceof Error?error.message:"Could not load background music settings")});return()=>{active=false;audio.stop()}},[]);
-useEffect(()=>{if(previousIndex.current!==undefined&&previousIndex.current!==i)sfx("swoosh");previousIndex.current=i;setPop(null);setFx(null);setPhase(0);
-if(st?.k==="sza"){const a=setTimeout(()=>{setPhase(1);sfx("swoosh");setFx("confetti")},1600),b=setTimeout(()=>{setPhase(2);sfx("swoosh");setFx("hearts")},3600);return()=>{clearTimeout(a);clearTimeout(b)}}
+useEffect(()=>{if(previousIndex.current!==undefined&&previousIndex.current!==i)playSfx("swoosh");previousIndex.current=i;setPop(null);setFx(null);setPhase(0);
+if(st?.k==="sza"){const a=setTimeout(()=>{setPhase(1);playSfx("swoosh");setFx("confetti")},1600),b=setTimeout(()=>{setPhase(2);playSfx("swoosh");setFx("hearts")},3600);return()=>{clearTimeout(a);clearTimeout(b)}}
 if(st?.k==="final"){finish();setFx("confetti")}},[i]);
 if(err)return <div className={shell}><h2 className="font-serif text-2xl text-crimson">Something went wrong</h2><p>{err}</p></div>;
 if(!s||!st)return <div className="grid h-screen place-items-center bg-ivory font-serif text-2xl text-crimson">Loading…</div>;
 const qn=steps.slice(0,i+1).filter(x=>x.k==="q"&&!x.hidden).length,total=steps.filter(x=>x.k==="q"&&!x.hidden).length;
-const go=()=>{audio.start();sfx("click");next()};
+const go=()=>{next();startMusic();playSfx("click")};
 const Btn=({t,on}:{t:string;on:()=>void})=><motion.button whileTap={{scale:.94}} onClick={on} className="mt-8 rounded-full bg-crimson px-8 py-4 font-semibold text-ivory shadow-xl">{t}</motion.button>;
-const onPick=(idx:number)=>{audio.start();sfx("click");const g=st.ok==null||idx===st.ok;void answer(idx,st.o![idx]);
-const t=st.ok!=null?(g?st.rs!:st.rg!):Array.isArray(st.r)?st.r[idx]:st.r!;setFx(st.fx==="hearts"||(st.ok!=null&&g)?"hearts":null);setTimeout(()=>setPop({e:st.em?[...st.em][idx]:g?"😘":"💬",t}),450)};
+const onPick=(idx:number)=>{const g=st.ok==null||idx===st.ok;void answer(idx,st.o![idx]);
+const t=st.ok!=null?(g?st.rs!:st.rg!):Array.isArray(st.r)?st.r[idx]:st.r!;setFx(st.fx==="hearts"||(st.ok!=null&&g)?"hearts":null);setTimeout(()=>setPop({e:st.em?[...st.em][idx]:g?"😘":"💬",t}),450);startMusic();playSfx("click")};
 let body;
 if(st.k==="name")body=<><h1 className="font-serif text-5xl font-black leading-[.95] text-crimson">Who are we investigating today?</h1><div className="mt-8 space-y-3">
 <input className="w-full rounded-full bg-cream px-6 py-4 outline-none focus:ring-2 focus:ring-crimson" placeholder="Your name" value={f.name} onChange={e=>setF({...f,name:e.target.value})}/>
@@ -42,8 +44,8 @@ else if(st.k==="q"){const v=st.m==="brain"?"brain":st.m==="letter"?"love":st.o!.
 body=<><p className="text-[11px] font-semibold uppercase tracking-[.25em] text-crimson">{st.ch} · Question {String(qn).padStart(2,"0")} / {total}</p>
 <h1 className={`mt-2 font-serif text-4xl font-black leading-[1.02] ${v==="brain"?"text-ivory":"text-crimson"}`}>{st.q}</h1>
 <div className={v==="tile"?"mt-6 grid grid-cols-2 gap-3":"mt-6 space-y-3"}>{st.o!.map((o,idx)=><AnswerCard key={idx} label={o} emoji={[...st.e!][idx]} path={imgs[`q${i}:${idx}`]} variant={v} tall={v==="tile"&&(idx===0||idx===3)} selected={sel===idx} dim={sel!==undefined} onClick={()=>onPick(idx)}/>)}</div></>}
-else body=<Result onRetake={()=>{audio.start();sfx("click");void retake()}}/>;
+else body=<Result onRetake={()=>{void retake();startMusic();playSfx("click")}}/>;
 const bg=st.k==="q"&&st.m==="brain"?"!bg-burgundy !bg-none":"";
 return <div className={`${shell} ${bg}`}>{(imageError||musicError)&&<p role="alert" className="mb-2 rounded-lg bg-red-100 p-2 text-sm text-red-700">{imageError||musicError}</p>}{st.k!=="final"&&<ProgressBar value={i/(steps.length-1)} label={st.k==="q"?`${qn}/${total}`:""}/>}
 <AnimatePresence mode="wait"><motion.div key={i} className="flex min-h-full flex-col" initial={{x:80,opacity:0}} animate={{x:0,opacity:1}} exit={{x:-80,opacity:0}} transition={{type:"spring",damping:22}}>{body}</motion.div></AnimatePresence>
-{fx&&<Fx kind={fx}/>}{pop&&<ReactionPopup emoji={pop.e} text={pop.t} onNext={go}/>}<MusicPlayer covered={!!pop} error={musicError}/></div>}
+{fx&&<Fx kind={fx}/>}{pop&&<ReactionPopup emoji={pop.e} text={pop.t} onNext={go}/>}</div>}
